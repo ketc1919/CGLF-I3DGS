@@ -1,0 +1,16 @@
+meshio
+tqdm
+opencv-python
+lpips
+addict
+kornia
+joblib
+timm
+
+depth-anything-3 @ git+https://github.com/ByteDance-Seed/Depth-Anything-3.git@40674546e40144452ec93035ac77d762f4b5d16f
+git+https://github.com/rahul-goel/fused-ssim
+
+graphdecoviewer @ git+https://github.com/graphdeco-inria/graphdecoviewer@i3dgs-fixes
+
+submodules/diff-gaussian-rasterization
+submodules/simple-knn

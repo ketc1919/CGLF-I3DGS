@@ -1,0 +1,9 @@
+[submodule "i3dgs/submodules/Depth-Anything-V2"]
+	path = i3dgs/submodules/Depth-Anything-V2
+	url = https://github.com/DepthAnything/Depth-Anything-V2.git
+[submodule "i3dgs/submodules/xfeat"]
+	path = i3dgs/submodules/xfeat
+	url = https://github.com/verlab/accelerated_features
+[submodule "i3dgs/submodules/diff-gaussian-rasterization/third_party/glm"]
+	path = i3dgs/submodules/diff-gaussian-rasterization/third_party/glm
+	url = https://github.com/g-truc/glm.git
