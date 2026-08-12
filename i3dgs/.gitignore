@@ -1,0 +1,12 @@
+*.pyc
+*egg-info
+.venv/
+build
+models/*
+Gaussian_Viewer.ini
+.vscode
+data/
+results/*
+*.hip
+*_hip.*
+hip_*

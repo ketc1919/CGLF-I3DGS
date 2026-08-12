@@ -1,0 +1,42 @@
+# Python and environments
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Editors and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Build and native-extension artifacts
+build/
+dist/
+*.o
+*.obj
+*.so
+*.pyd
+*.dll
+
+# Data, model weights, caches, and experiment outputs
+data/
+datasets/
+models/
+weights/
+outputs/
+output/
+results/
+checkpoints/
+wandb/
+logs/
+*.pt
+*.pth
+*.ckpt
+
+# Local scratch files
+*.tmp
+*.partial
+*.zip
