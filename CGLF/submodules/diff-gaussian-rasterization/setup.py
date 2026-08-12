@@ -12,7 +12,21 @@
 from setuptools import setup
 from torch.utils.cpp_extension import CUDAExtension, BuildExtension
 import os
-os.path.dirname(os.path.abspath(__file__))
+
+project_root = os.path.dirname(os.path.abspath(__file__))
+
+nvcc_args = [
+    "-allow-unsupported-compiler",
+    "-I" + os.path.join(project_root, "third_party/glm/"),
+]
+cxx_args = []
+
+if os.name == "nt":
+    nvcc_args.append("-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH")
+    cxx_args.append("/D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH")
+else:
+    nvcc_args.extend(["-O3", "--use_fast_math"])
+    cxx_args.append("-O3")
 
 setup(
     name="diff_gaussian_rasterization",
@@ -27,12 +41,8 @@ setup(
             "rasterize_points.cu",
             "ext.cpp"],
             extra_compile_args={
-                "nvcc": [
-                    "-allow-unsupported-compiler",
-                    "-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH",
-                    "-I" + os.path.join(os.path.dirname(os.path.abspath(__file__)), "third_party/glm/")
-                ],
-                "cxx": ["/D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH"]
+                "nvcc": nvcc_args,
+                "cxx": cxx_args,
             })
         ],
     cmdclass={

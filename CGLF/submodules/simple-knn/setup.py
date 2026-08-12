@@ -14,9 +14,15 @@ from torch.utils.cpp_extension import CUDAExtension, BuildExtension
 import os
 
 cxx_compiler_flags = []
+nvcc_compiler_flags = ["-allow-unsupported-compiler"]
 
 if os.name == 'nt':
     cxx_compiler_flags.append("/wd4624")
+    cxx_compiler_flags.append("/D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH")
+    nvcc_compiler_flags.append("-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH")
+else:
+    cxx_compiler_flags.append("-O3")
+    nvcc_compiler_flags.extend(["-O3", "--use_fast_math"])
 
 setup(
     name="simple_knn",
@@ -27,7 +33,10 @@ setup(
             "spatial.cu", 
             "simple_knn.cu",
             "ext.cpp"],
-            extra_compile_args={"nvcc": ["-allow-unsupported-compiler", "-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH"], "cxx": cxx_compiler_flags + ["/D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH"]})
+            extra_compile_args={
+                "nvcc": nvcc_compiler_flags,
+                "cxx": cxx_compiler_flags,
+            })
         ],
     cmdclass={
         'build_ext': BuildExtension
