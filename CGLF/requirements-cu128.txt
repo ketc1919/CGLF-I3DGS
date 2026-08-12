@@ -1,0 +1,13 @@
+# Install PyTorch and torchvision from the CUDA 12.8 wheel index first.
+numpy<2
+pillow
+tqdm
+plyfile>=0.8.1
+opencv-python-headless
+lpips
+colorama
+tensorboard
+einops
+laspy
+wandb
+ninja
