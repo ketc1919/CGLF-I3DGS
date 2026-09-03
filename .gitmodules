@@ -7,3 +7,6 @@
 [submodule "i3dgs/submodules/diff-gaussian-rasterization/third_party/glm"]
 	path = i3dgs/submodules/diff-gaussian-rasterization/third_party/glm
 	url = https://github.com/g-truc/glm.git
+[submodule "Scaffold-GS"]
+	path = Scaffold-GS
+	url = https://github.com/city-super/Scaffold-GS.git
