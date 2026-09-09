@@ -537,6 +537,7 @@ def _build_commands(
     iterations: int,
     voxel_size: float,
     appearance_dim: int,
+    eval_mode: bool,
     i3dgs_num_iterations: int | None,
 ) -> tuple[list[str], list[str]]:
     """构造 I3DGS 和 Scaffold-GS 的参数列表。
@@ -584,6 +585,10 @@ def _build_commands(
         "--appearance_dim",  # 外观 embedding 维度，并影响 checkpoint 文件集合。
         str(appearance_dim),
     ]
+    # eval 只属于 Scaffold-GS 的数据划分和评估流程，不传给负责位姿估计
+    # 与 BA 的 I3DGS。关闭时不追加参数，保持官方 Scaffold-GS 的默认行为。
+    if eval_mode:
+        scaffold_command.append("--eval")
     return i3dgs_command, scaffold_command
 
 
@@ -669,6 +674,7 @@ def _write_manifest(
     iterations: int,
     voxel_size: float,
     appearance_dim: int,
+    eval_mode: bool,
     i3dgs_sha: str,
     scaffold_sha: str,
     i3dgs_log: Path,
@@ -692,6 +698,7 @@ def _write_manifest(
         "iterations": iterations,
         "voxel_size": voxel_size,
         "appearance_dim": appearance_dim,
+        "eval": eval_mode,
         "commands": {
             "i3dgs": {
                 "status": "skipped" if skip_i3dgs else "executed",
@@ -734,6 +741,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--iterations", type=int, default=30_000, help="仅传给 Scaffold-GS 的迭代数")
     parser.add_argument("--voxel_size", type=float, default=0.001)
     parser.add_argument("--appearance_dim", type=int, default=32)
+    parser.add_argument(
+        "--eval",
+        action="store_true",
+        help="仅传给 Scaffold-GS：启用训练/测试视角划分和测试迭代评估",
+    )
     parser.add_argument(
         "--i3dgs_num_iterations",
         type=int,
@@ -792,6 +804,7 @@ def run_pipeline(namespace: argparse.Namespace) -> dict[str, Any] | None:
         iterations=namespace.iterations,
         voxel_size=namespace.voxel_size,
         appearance_dim=namespace.appearance_dim,
+        eval_mode=namespace.eval,
         i3dgs_num_iterations=namespace.i3dgs_num_iterations,
     )
 
@@ -842,6 +855,7 @@ def run_pipeline(namespace: argparse.Namespace) -> dict[str, Any] | None:
         iterations=namespace.iterations,
         voxel_size=namespace.voxel_size,
         appearance_dim=namespace.appearance_dim,
+        eval_mode=namespace.eval,
         i3dgs_sha=i3dgs_sha,
         scaffold_sha=scaffold_sha,
         i3dgs_log=i3dgs_log,

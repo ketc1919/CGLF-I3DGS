@@ -131,6 +131,7 @@ class Stage1PipelineTests(unittest.TestCase):
             "iterations": 10,
             "voxel_size": 0.001,
             "appearance_dim": 0,
+            "eval": False,
             "i3dgs_num_iterations": None,
             "skip_i3dgs": False,
             "dry_run": False,
@@ -223,6 +224,23 @@ class Stage1PipelineTests(unittest.TestCase):
         self.assertIn("Scaffold-GS command:", text)
         self.assertFalse(Path(args.exported_scene).exists())
 
+    def test_eval_is_only_forwarded_to_scaffold_command(self) -> None:
+        """验证顶层 --eval 只进入 Scaffold-GS 命令，不影响 I3DGS 命令。"""
+
+        args = self.namespace(eval=True, dry_run=True)
+        with mock.patch.object(
+            run_stage1.subprocess,
+            "run",
+            side_effect=AssertionError("dry-run must not invoke subprocess"),
+        ), redirect_stdout(io.StringIO()) as output:
+            self.assertIsNone(run_stage1.run_pipeline(args))
+
+        lines = output.getvalue().splitlines()
+        i3dgs_line = next(line for line in lines if line.startswith("I3DGS command:"))
+        scaffold_line = next(line for line in lines if line.startswith("Scaffold-GS command:"))
+        self.assertNotIn("--eval", i3dgs_line)
+        self.assertIn("--eval", scaffold_line)
+
     def test_skip_dry_run_only_prints_scaffold_command(self) -> None:
         """验证 skip dry-run 复用有效场景且只打印 Scaffold-GS 命令。"""
 
@@ -278,6 +296,7 @@ class Stage1PipelineTests(unittest.TestCase):
         # manifest 应记录 I3DGS 已执行，且命令以参数数组保存。
         self.assertEqual(manifest["commands"]["i3dgs"]["status"], "executed")
         self.assertIsInstance(manifest["commands"]["i3dgs"]["argv"], list)
+        self.assertFalse(manifest["eval"])
         # fake Git 返回的 SHA 应被写入 manifest；两个独立日志也应存在。
         self.assertEqual(manifest["i3dgs_git_sha"], "abc123")
         self.assertTrue(Path(result["i3dgs_log"]).is_file())
