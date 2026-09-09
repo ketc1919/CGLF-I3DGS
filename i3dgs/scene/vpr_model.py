@@ -128,8 +128,16 @@ class VPRInternal(nn.Module):
                 torch.rot90(img, k=3, dims=[2, 3]),
             ], dim=0)
 
-        features = self.model.backbone(img)
-        features = self.model.aggregator.agg(features)
+        patch_features, cls_token = self.model.backbone(img)
+
+        # MegaLoc 的 backbone 使用 FP16，而最优传输聚合和概率计算保留
+        # FP32。在模块边界显式转换，避免 einsum 混用 Half 和 Float。
+        patch_features = patch_features.float()
+        cls_token = cls_token.float()
+
+        features = self.model.aggregator.agg(
+            (patch_features, cls_token)
+        )
         linear = self.model.aggregator.linear
         features = linear(features.to(linear.weight.dtype))
         features = self.model.l2norm(features)
@@ -153,7 +161,7 @@ class VPRModelWrapper:
         cache_path = os.path.join(
             "models",
             "cache",
-            f"vpr_megaloc_halfsafe_{'rot' if use_rotated_descriptors else 'norot'}_b{self.batch}_{w}_{h}.pt",
+            f"vpr_megaloc_fp16backbone_fp32agg_v1_{'rot' if use_rotated_descriptors else 'norot'}_b{self.batch}_{w}_{h}.pt",
         )
 
         self.model = None
@@ -167,8 +175,15 @@ class VPRModelWrapper:
 
         if self.model is None:
             model = torch.hub.load("gmberton/MegaLoc", "get_trained_model", trust_repo=True)
+            model = model.eval().cuda()
+
+            # Backbone 是主要计算部分，使用 FP16；Aggregator 包含最优传输、
+            # logsumexp 和概率加权，固定使用 FP32 保证数值和类型稳定。
+            model.backbone.half()
+            model.aggregator.float()
+
             internal = VPRInternal(
-                model.half().eval().cuda(),
+                model,
                 use_rotated_descriptors,
                 self.run_h,
                 self.run_w,
