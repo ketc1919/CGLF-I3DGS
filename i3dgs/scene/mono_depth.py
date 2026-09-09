@@ -57,6 +57,18 @@ class MonoDepthInternal(torch.nn.Module):
         os.environ["XFORMERS_FORCE_DISABLE_TRITON"] = "1"
         from depth_anything_v2.dpt import DepthAnythingV2
 
+        # RTX 5090 的计算能力为 SM120。当前 xFormers 0.0.31.post1
+        # 的 FA3 内核存在兼容问题，在模型预热和 CUDA Graph 捕获前禁用。
+        # 保留 xFormers，由其继续选择其他满足输入条件的注意力后端。
+        if torch.cuda.get_device_capability() == (12, 0):
+            from xformers.ops.fmha import dispatch as xformers_dispatch
+
+            xformers_dispatch._set_use_fa3(False)
+            print(
+                "[I3DGS] SM120: xFormers FA3 disabled.",
+                flush=True,
+            )
+
         self.register_buffer("edge_conf_var", torch.tensor(edge_conf_variance, device="cuda", dtype=torch.half))
         model_path = f"models/depth_anything_v2_{encoder}.pth"
         if not os.path.exists(model_path):
