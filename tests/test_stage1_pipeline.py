@@ -132,6 +132,7 @@ class Stage1PipelineTests(unittest.TestCase):
             "voxel_size": 0.001,
             "appearance_dim": 0,
             "eval": False,
+            "export_depth": False,
             "i3dgs_num_iterations": None,
             "skip_i3dgs": False,
             "dry_run": False,
@@ -176,6 +177,20 @@ class Stage1PipelineTests(unittest.TestCase):
 
         args = self.namespace(skip_i3dgs=True, dry_run=True)
         # 这里没有创建 exported scene，因此预期在任何 subprocess 之前失败。
+        with self.assertRaises(FileNotFoundError):
+            run_stage1.run_pipeline(args)
+
+    def test_skip_export_depth_requires_existing_depth_files(self) -> None:
+        """验证 skip_i3dgs+export_depth 只能复用已经齐全的深度场景。"""
+
+        exported = self.root / "exported-depth-missing"
+        make_exported_scene(exported)
+        args = self.namespace(
+            exported_scene=str(exported),
+            skip_i3dgs=True,
+            export_depth=True,
+            dry_run=True,
+        )
         with self.assertRaises(FileNotFoundError):
             run_stage1.run_pipeline(args)
 
@@ -240,6 +255,23 @@ class Stage1PipelineTests(unittest.TestCase):
         scaffold_line = next(line for line in lines if line.startswith("Scaffold-GS command:"))
         self.assertNotIn("--eval", i3dgs_line)
         self.assertIn("--eval", scaffold_line)
+
+    def test_export_depth_is_only_forwarded_to_i3dgs_command(self) -> None:
+        """验证 --export_depth 只进入 I3DGS 命令，不启动真实训练。"""
+
+        args = self.namespace(export_depth=True, dry_run=True)
+        with mock.patch.object(
+            run_stage1.subprocess,
+            "run",
+            side_effect=AssertionError("dry-run must not invoke subprocess"),
+        ), redirect_stdout(io.StringIO()) as output:
+            self.assertIsNone(run_stage1.run_pipeline(args))
+
+        lines = output.getvalue().splitlines()
+        i3dgs_line = next(line for line in lines if line.startswith("I3DGS command:"))
+        scaffold_line = next(line for line in lines if line.startswith("Scaffold-GS command:"))
+        self.assertIn("--export_depth", i3dgs_line)
+        self.assertNotIn("--export_depth", scaffold_line)
 
     def test_skip_dry_run_only_prints_scaffold_command(self) -> None:
         """验证 skip dry-run 复用有效场景且只打印 Scaffold-GS 命令。"""

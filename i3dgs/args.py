@@ -262,6 +262,8 @@ def get_args():
                         help="Save keyframe images to model_path/images")
     parser.add_argument('--cglf_scene_path', type=str, default="",
                         help="If set, export the final registered images, COLMAP cameras, and filtered BA landmarks as a new CGLF scene directory. Existing directories are never overwritten.")
+    parser.add_argument('--export_depth', action='store_true',
+                        help="Export final BA-aligned Depth Anything V2 camera-Z maps under cglf_scene_path/depth. Requires --cglf_scene_path.")
 
     ## Viewer
     parser.add_argument('--viewer_mode', choices=['local', 'server', 'none'], default='none')

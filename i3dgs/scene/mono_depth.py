@@ -187,7 +187,10 @@ def robust_align_batched(tri: torch.Tensor, mono: torch.Tensor, k=5.0):
     mono_aligned = mono * scale[:, None] + offset[:, None]
     err = (mono_aligned - tri).abs()
     med_err = nanmedian(err, dim=1)
-    keep = err < (k * med_err[:, None])
+    # Use <= so an exactly consistent synthetic/real block is not discarded
+    # when both its median error and MAD are zero.  Non-finite rows remain
+    # masked and are filled by the existing coarse/neighbour fallback.
+    keep = torch.isfinite(err) & (err <= (k * med_err[:, None]))
     tri2  = tri.masked_fill(~keep, float("nan"))
     mono2 = mono.masked_fill(~keep, float("nan"))
     return align_samples_batched(tri2, mono2)

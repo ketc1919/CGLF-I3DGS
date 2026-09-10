@@ -352,6 +352,7 @@ def export_cglf_scene(
     input_image_paths: Iterable[os.PathLike | str],
     output_path: os.PathLike | str,
     min_observations: int = 2,
+    export_depth: bool = False,
 ) -> dict:
     """Create a new, non-overwriting CGLF scene from an I3DGS reconstruction."""
     reconstruction_path = Path(reconstruction_path).resolve()
@@ -400,6 +401,7 @@ def export_cglf_scene(
         "landmarks_before_filter": landmarks_before,
         "landmarks_after_filter": landmarks_after,
         "minimum_observations": min_observations,
+        "depth_export": bool(export_depth),
     }
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -420,6 +422,20 @@ def export_cglf_scene(
         shutil.copy2(images_bin, sparse_output / "images.bin")
         for name in registered_names:
             shutil.copy2(input_image_map[name], images_output / name)
+
+        if export_depth:
+            # Depth export must finish inside the same staging directory.  The
+            # final rename below is the publication boundary for images,
+            # cameras, landmarks, depth maps, and depth statistics together.
+            from depth_export import export_depth_maps
+
+            export_depth_maps(
+                scene_model=scene_model,
+                registered_names=registered_names,
+                source_image_map=input_image_map,
+                output_dir=staging_path / "depth",
+                min_observations=min_observations,
+            )
 
         write_cglf_ply(sparse_output / "points3D.ply", xyz, rgb)
         with (staging_path / "export_stats.json").open("w", encoding="utf-8") as handle:

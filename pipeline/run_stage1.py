@@ -428,7 +428,11 @@ def _validate_points3d_ply(path: Path) -> dict[str, Any]:
     return {"vertex_count": vertex_count, "properties": property_names}
 
 
-def validate_exported_scene(scene_path: os.PathLike[str] | str) -> dict[str, Any]:
+def validate_exported_scene(
+    scene_path: os.PathLike[str] | str,
+    *,
+    require_depth: bool = False,
+) -> dict[str, Any]:
     """验证 I3DGS 适配器生成的 COLMAP/CGLF 场景目录。
 
     参数 ``scene_path`` 是 exported_scene 根目录。函数检查非空
@@ -465,8 +469,40 @@ def validate_exported_scene(scene_path: os.PathLike[str] | str) -> dict[str, Any
     # 仅检查三个 COLMAP 文件存在还不足以说明点云可被读取，因此把 PLY
     # header、vertex 字段、顶点数量和有限 XYZ 的检查集中交给专门函数。
     ply_info = _validate_points3d_ply(required_files["points3D_ply"])
+    depth_files: list[Path] = []
+    if require_depth:
+        # skip_i3dgs 不会重新生成深度；此处只验证已经发布的每个注册图像
+        # 都有对应的二维 float 数组，避免把旧场景误当成带深度场景。
+        depth_dir = scene / "depth"
+        if not depth_dir.is_dir():
+            raise FileNotFoundError(f"Exported scene depth/ is missing: {depth_dir}")
+        depth_stats = scene / "depth_stats.json"
+        if not depth_stats.is_file() or depth_stats.stat().st_size <= 0:
+            raise FileNotFoundError(f"Exported scene depth_stats.json is missing or empty: {depth_stats}")
+        expected = {
+            f"{image.name.split('.', 1)[0]}.npy"
+            for image in image_files
+        }
+        depth_files = [depth_dir / name for name in sorted(expected)]
+        missing_depth = [str(path) for path in depth_files if not path.is_file() or path.stat().st_size <= 0]
+        if missing_depth:
+            raise FileNotFoundError(
+                "Exported scene depth is incomplete; missing or empty files: "
+                + ", ".join(missing_depth)
+            )
+        try:
+            import numpy as np
+            for path in depth_files:
+                depth = np.load(path, allow_pickle=False)
+                if depth.ndim != 2 or depth.dtype != np.float32:
+                    raise ValueError(f"Depth must be float32 [H,W]: {path}")
+                if not np.isfinite(depth).all() or not ((depth > 0) | (depth == 0)).all():
+                    raise ValueError(f"Depth contains invalid values: {path}")
+        except ImportError as exc:
+            raise RuntimeError("NumPy is required to validate exported depth") from exc
     return {
         "image_count": len(image_files),
+        "depth_count": len(depth_files),
         **ply_info,
     }
 
@@ -539,6 +575,7 @@ def _build_commands(
     appearance_dim: int,
     eval_mode: bool,
     i3dgs_num_iterations: int | None,
+    export_depth: bool,
 ) -> tuple[list[str], list[str]]:
     """构造 I3DGS 和 Scaffold-GS 的参数列表。
 
@@ -566,6 +603,8 @@ def _build_commands(
         # 该可选参数只控制 I3DGS 的 --num_iterations；顶层 --iterations
         # 则专门传给 Scaffold-GS，避免两个项目的同名概念混用。
         i3dgs_command.extend(["--num_iterations", str(i3dgs_num_iterations)])
+    if export_depth:
+        i3dgs_command.append("--export_depth")
 
     scaffold_command = [
         scaffold_python,  # Scaffold-GS 环境的 Python 解释器。
@@ -675,6 +714,7 @@ def _write_manifest(
     voxel_size: float,
     appearance_dim: int,
     eval_mode: bool,
+    export_depth: bool,
     i3dgs_sha: str,
     scaffold_sha: str,
     i3dgs_log: Path,
@@ -699,6 +739,7 @@ def _write_manifest(
         "voxel_size": voxel_size,
         "appearance_dim": appearance_dim,
         "eval": eval_mode,
+        "export_depth": export_depth,
         "commands": {
             "i3dgs": {
                 "status": "skipped" if skip_i3dgs else "executed",
@@ -751,6 +792,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="可选：传给 I3DGS 的 --num_iterations；不设置则使用 I3DGS 默认值",
+    )
+    parser.add_argument(
+        "--export_depth",
+        action="store_true",
+        help="传给 I3DGS：导出最终 BA 对齐的相机 Z 深度到 exported_scene/depth",
     )
     parser.add_argument("--skip_i3dgs", action="store_true", help="复用已验证的 exported_scene")
     parser.add_argument("--dry_run", action="store_true", help="仅打印命令，不训练、不创建输出")
@@ -806,12 +852,13 @@ def run_pipeline(namespace: argparse.Namespace) -> dict[str, Any] | None:
         appearance_dim=namespace.appearance_dim,
         eval_mode=namespace.eval,
         i3dgs_num_iterations=namespace.i3dgs_num_iterations,
+        export_depth=namespace.export_depth,
     )
 
     if namespace.skip_i3dgs:
         # skip 不是跳过所有检查，而是复用一个已经存在的 exported_scene；
         # 只有目录结构、文件和 PLY 都通过验证后，才允许进入 Scaffold-GS。
-        validate_exported_scene(exported_scene)
+        validate_exported_scene(exported_scene, require_depth=namespace.export_depth)
 
     if namespace.dry_run:
         # dry-run 的边界在这里返回：前面的路径检查仍然是只读的，但不会
@@ -827,7 +874,7 @@ def run_pipeline(namespace: argparse.Namespace) -> dict[str, Any] | None:
         # I3DGS 的一次运行同时负责位姿、BA 和最终 adapter export；其成功
         # 返回后才检查 exported_scene，确保下游不会读取半成品目录。
         _run_logged_command(i3dgs_command, repo_root / "i3dgs", i3dgs_log, "I3DGS")
-        validate_exported_scene(exported_scene)
+        validate_exported_scene(exported_scene, require_depth=namespace.export_depth)
     # exported_scene 验证通过（或 skip 模式复用已验证场景）后，才把它作为
     # Scaffold-GS 的 source_path。两个脚本使用各自项目目录作为 cwd。
     _run_logged_command(
@@ -856,6 +903,7 @@ def run_pipeline(namespace: argparse.Namespace) -> dict[str, Any] | None:
         voxel_size=namespace.voxel_size,
         appearance_dim=namespace.appearance_dim,
         eval_mode=namespace.eval,
+        export_depth=namespace.export_depth,
         i3dgs_sha=i3dgs_sha,
         scaffold_sha=scaffold_sha,
         i3dgs_log=i3dgs_log,

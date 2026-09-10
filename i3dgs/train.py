@@ -47,6 +47,8 @@ class ReconstructionTask:
         self.args = args
 
         self.dataset = ImageDataset(self.args)
+        if self.args.export_depth and not self.args.cglf_scene_path:
+            raise ValueError("--export_depth requires --cglf_scene_path")
         if self.args.cglf_scene_path:
             preflight_cglf_export(
                 output_path=self.args.cglf_scene_path,
@@ -723,6 +725,7 @@ class ReconstructionTask:
                 input_image_paths=self.dataset.image_paths,
                 output_path=self.args.cglf_scene_path,
                 min_observations=2,
+                export_depth=self.args.export_depth,
             )
         print(
             ", ".join(
